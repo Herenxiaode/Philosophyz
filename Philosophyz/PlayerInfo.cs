@@ -8,11 +8,8 @@ namespace Philosophyz
 	public class PlayerInfo
 	{
 		public const string InfoKey = "pz-info";
-
 		private readonly TSPlayer _player;
-
 		private bool? _fakeSscStatus;
-
 		public bool? FakeSscStatus
 		{
 			get => _fakeSscStatus;
@@ -26,17 +23,13 @@ namespace Philosophyz
 		}
 
 		internal TShockAPI.DB.Region CurrentRegion;
-
 		public bool InSscRegion { get; internal set; }
-
 		public bool BypassChange { get; internal set; }
-
 		public PlayerData OriginData { get; internal set; }
 
 		private PlayerInfo(TSPlayer player)
 		{
 			_player = player;
-
 			FakeSscStatus = false;
 		}
 
@@ -50,16 +43,10 @@ namespace Philosophyz
 
 		public void ChangeSlot(int slot, int netId, byte prefix, int stack)
 		{
-			if (slot > Main.maxInventory)
-			{
-				return;
-			}
+			if (slot > NetItem.MaxInventory) return;
 
-			if (FakeSscStatus != true) // 服务器现状为伪装无ssc并在区域内有ssc
-			{
-				return;
-			}
-
+			if (FakeSscStatus != true) return;// 服务器现状为伪装无ssc并在区域内有ssc
+			
 			_player.TPlayer.inventory[slot].netDefaults(netId);
 
 			if (_player.TPlayer.inventory[slot].netID != 0)
@@ -74,17 +61,12 @@ namespace Philosophyz
 
 		public void ChangeInventory(NetItem[] items)
 		{
-			if (FakeSscStatus != true) // 服务器现状为伪装无ssc并在区域内有ssc
-			{
-				return;
-			}
+			if (FakeSscStatus != true) return;// 服务器现状为伪装无ssc并在区域内有ssc
 
-			var max = Math.Min(items.Length, Main.maxInventory) + 1;
-
+			var max = Math.Min(items.Length,NetItem.MaxInventory) + 1;
 			for (var i = 0; i < max; i++)
 			{
 				_player.TPlayer.inventory[i].netDefaults(items[i].NetId);
-
 				if (_player.TPlayer.inventory[i].netID != 0)
 				{
 					_player.TPlayer.inventory[i].stack = items[i].Stack;
@@ -93,25 +75,13 @@ namespace Philosophyz
 			}
 
 			for (var k = 0; k < NetItem.InventorySlots; k++)
-			{
 				NetMessage.SendData(5, -1, -1, NetworkText.FromLiteral(Main.player[_player.Index].inventory[k].Name), _player.Index, k, Main.player[_player.Index].inventory[k].prefix);
-			}
-
 			for (var k = 0; k < NetItem.InventorySlots; k++)
-			{
 				NetMessage.SendData(5, _player.Index, -1, NetworkText.FromLiteral(Main.player[_player.Index].inventory[k].Name), _player.Index, k, Main.player[_player.Index].inventory[k].prefix);
-			}
 		}
 
-		public void ChangeCharacter(PlayerData data)
-		{
-			data.RestoreCharacter(_player);
-		}
-
-		public void RestoreCharacter()
-		{
-			ChangeCharacter(OriginData);
-		}
+		public void ChangeCharacter(PlayerData data)=>data.RestoreCharacter(_player);
+		public void RestoreCharacter()=>ChangeCharacter(OriginData);
 
 		public static PlayerInfo GetPlayerInfo(TSPlayer player)
 		{

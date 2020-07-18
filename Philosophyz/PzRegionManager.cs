@@ -12,31 +12,17 @@ namespace Philosophyz
 	public class PzRegion
 	{
 		public int Id { get; set; }
-
-		/// <summary>
-		/// 用于单一存档时的默认存档
-		/// </summary>
+		/// <summary>用于单一存档时的默认存档</summary>
 		public string Default { get; set; }
-
-		/// <summary>
-		/// 存档集合
-		/// </summary>
+		/// <summary>存档集合</summary>
 		public Dictionary<string, PlayerData> PlayerDatas { get; set; }
-
-		/// <summary>
-		/// 是否为单一存档
-		/// </summary>
+		/// <summary>是否为单一存档</summary>
 		public bool HasDefault => !string.IsNullOrWhiteSpace(Default);
-
-		/// <summary>
-		/// 获取单一存档 (如果有的话)
-		/// </summary>
+		/// <summary>获取单一存档 (如果有的话)</summary>
 		/// <returns>单一存档信息</returns>
 		public PlayerData GetDefaultData()
 		{
-			if (!HasDefault)
-				return null;
-
+			if (!HasDefault) return null;
 			return !PlayerDatas.TryGetValue(Default, out PlayerData r) ? null : r;
 		}
 	}
@@ -44,57 +30,50 @@ namespace Philosophyz
 	internal class PzRegionManager
 	{
 		public List<PzRegion> PzRegions = new List<PzRegion>();
-
 		private readonly IDbConnection _database;
-
 		public PzRegionManager(IDbConnection db)
 		{
 			_database = db;
-
 			var table = new SqlTable("PzRegions",
-									 new SqlColumn("Region", MySqlDbType.Int32) { Primary = true },
-									 new SqlColumn("DefaultChar", MySqlDbType.VarChar, 10)
+				new SqlColumn("Region", MySqlDbType.Int32) { Primary = true },
+				new SqlColumn("DefaultChar", MySqlDbType.VarChar, 10)
 			);
-
 			var charsTable = new SqlTable("PzChars",
-										  new SqlColumn("Name", MySqlDbType.VarChar, 10) { Unique = true },
-										  new SqlColumn("RegionId", MySqlDbType.Int32) { Unique = true },
-										  new SqlColumn("Health", MySqlDbType.Int32),
-										  new SqlColumn("MaxHealth", MySqlDbType.Int32),
-										  new SqlColumn("Mana", MySqlDbType.Int32),
-										  new SqlColumn("MaxMana", MySqlDbType.Int32),
-										  new SqlColumn("Inventory", MySqlDbType.Text),
-										  new SqlColumn("extraSlot", MySqlDbType.Int32),
-										  new SqlColumn("spawnX", MySqlDbType.Int32),
-										  new SqlColumn("spawnY", MySqlDbType.Int32),
-										  new SqlColumn("skinVariant", MySqlDbType.Int32),
-										  new SqlColumn("hair", MySqlDbType.Int32),
-										  new SqlColumn("hairDye", MySqlDbType.Int32),
-										  new SqlColumn("hairColor", MySqlDbType.Int32),
-										  new SqlColumn("pantsColor", MySqlDbType.Int32),
-										  new SqlColumn("shirtColor", MySqlDbType.Int32),
-										  new SqlColumn("underShirtColor", MySqlDbType.Int32),
-										  new SqlColumn("shoeColor", MySqlDbType.Int32),
-										  new SqlColumn("hideVisuals", MySqlDbType.Int32),
-										  new SqlColumn("skinColor", MySqlDbType.Int32),
-										  new SqlColumn("eyeColor", MySqlDbType.Int32),
-										  new SqlColumn("questsCompleted", MySqlDbType.Int32)
+				new SqlColumn("Name", MySqlDbType.VarChar, 10) { Unique = true },
+				new SqlColumn("RegionId", MySqlDbType.Int32) { Unique = true },
+				new SqlColumn("Health", MySqlDbType.Int32),
+				new SqlColumn("MaxHealth", MySqlDbType.Int32),
+				new SqlColumn("Mana", MySqlDbType.Int32),
+				new SqlColumn("MaxMana", MySqlDbType.Int32),
+				new SqlColumn("Inventory", MySqlDbType.Text),
+				new SqlColumn("extraSlot", MySqlDbType.Int32),
+				new SqlColumn("spawnX", MySqlDbType.Int32),
+				new SqlColumn("spawnY", MySqlDbType.Int32),
+				new SqlColumn("skinVariant", MySqlDbType.Int32),
+				new SqlColumn("hair", MySqlDbType.Int32),
+				new SqlColumn("hairDye", MySqlDbType.Int32),
+				new SqlColumn("hairColor", MySqlDbType.Int32),
+				new SqlColumn("pantsColor", MySqlDbType.Int32),
+				new SqlColumn("shirtColor", MySqlDbType.Int32),
+				new SqlColumn("underShirtColor", MySqlDbType.Int32),
+				new SqlColumn("shoeColor", MySqlDbType.Int32),
+				new SqlColumn("hideVisuals", MySqlDbType.Int32),
+				new SqlColumn("skinColor", MySqlDbType.Int32),
+				new SqlColumn("eyeColor", MySqlDbType.Int32),
+				new SqlColumn("questsCompleted", MySqlDbType.Int32)
 			);
 			var creator = new SqlTableCreator(db,
-											  db.GetSqlType() == SqlType.Sqlite
-												  ? (IQueryBuilder)new SqliteQueryCreator()
-												  : new MysqlQueryCreator());
+				db.GetSqlType() == SqlType.Sqlite
+				? (IQueryBuilder)new SqliteQueryCreator()
+				: new MysqlQueryCreator());
 			creator.EnsureTableStructure(table);
 			creator.EnsureTableStructure(charsTable);
 		}
 
-		/// <summary>
-		/// 重新加载所有数据库中的pz区域
-		/// </summary>
+		/// <summary>重新加载所有数据库中的pz区域</summary>
 		public void ReloadRegions()
 		{
 			PzRegions.Clear();
-
 			using (var reader = _database.QueryReader("SELECT PzRegions.* FROM PzRegions, Regions WHERE PzRegions.Region = Regions.Id AND Regions.WorldID = @0", Main.worldID))
 			{
 				while (reader != null && reader.Read())
@@ -106,9 +85,7 @@ namespace Philosophyz
 						Default = reader.Get<string>("DefaultChar"),
 						PlayerDatas = ReadDatas(id)
 					};
-
 					PzRegions.Add(region);
-
 					if (!string.IsNullOrWhiteSpace(region.Default) && !region.PlayerDatas.ContainsKey(region.Default))
 					{
 						TShock.Log.Warn("[PzRegion] 已经删除无效的默认值 ({0}-{1}).", region.Default, region.Id);
@@ -118,19 +95,15 @@ namespace Philosophyz
 			}
 		}
 
-		/// <summary>
-		/// 添加区域作为pz区域
-		/// </summary>
+		/// <summary>添加区域作为pz区域</summary>
 		/// <param name="id">区域</param>
 		public void AddRegion(int id)
 		{
-			if (PzRegions.Exists(p => p.Id == id))
-				return;
+			if (PzRegions.Exists(p => p.Id == id)) return;
 
 			try
 			{
-				_database.Query(
-					"INSERT INTO PzRegions(Region) VALUES(@0); ", id);
+				_database.Query("INSERT INTO PzRegions(Region) VALUES(@0); ", id);
 				PzRegions.Add(new PzRegion
 				{
 					Id = id,
@@ -143,9 +116,7 @@ namespace Philosophyz
 			}
 		}
 
-		/// <summary>
-		/// 删去区域及所有人物存档
-		/// </summary>
+		/// <summary>删去区域及所有人物存档</summary>
 		/// <param name="id"></param>
 		public void RemoveRegion(int id)
 		{
@@ -161,19 +132,14 @@ namespace Philosophyz
 			}
 		}
 
-		/// <summary>
-		/// 增加人物存档
-		/// </summary>
+		/// <summary>增加人物存档</summary>
 		/// <param name="id"></param>
 		/// <param name="name"></param>
 		/// <param name="playerData"></param>
 		public void AddCharacter(int id, string name, PlayerData playerData)
 		{
-			if (!PzRegions.Exists(p => p.Id == id))
-				return;
-
+			if (!PzRegions.Exists(p => p.Id == id)) return;
 			var datas = GetRegionById(id).PlayerDatas;
-
 			try
 			{
 				if (datas.ContainsKey(name))
@@ -241,9 +207,7 @@ namespace Philosophyz
 			}
 		}
 
-		/// <summary>
-		/// 删去区域内的人物存档
-		/// </summary>
+		/// <summary>删去区域内的人物存档</summary>
 		/// <param name="id"></param>
 		/// <param name="name"></param>
 		public void RemoveCharacter(int id, string name)
@@ -268,15 +232,12 @@ namespace Philosophyz
 			}
 		}
 
-		/// <summary>
-		/// 设定区域内的单一存档
-		/// </summary>
+		/// <summary>设定区域内的单一存档</summary>
 		/// <param name="id">区域</param>
 		/// <param name="name">存档名</param>
 		public void SetDefaultCharacter(int id, string name)
 		{
-			if (!PzRegions.Exists(p => p.Id == id))
-				return;
+			if (!PzRegions.Exists(p => p.Id == id))return;
 
 			GetRegionById(id).Default = name;
 
@@ -290,20 +251,13 @@ namespace Philosophyz
 			}
 		}
 
-		/// <summary>
-		/// 使用id寻找pz区域
-		/// </summary>
+		/// <summary>使用id寻找pz区域</summary>
 		/// <param name="id">区域id</param>
 		/// <returns>区域(若无则为null)</returns>
 		public PzRegion GetRegionById(int id)
-		{
-			return PzRegions.SingleOrDefault(p => p.Id == id);
-		}
-
+			=>PzRegions.SingleOrDefault(p => p.Id == id);
 		public bool TryGetCharater(int id, string name, out PlayerData data)
-		{
-			return GetRegionById(id).PlayerDatas.TryGetValue(name, out data);
-		}
+			=>GetRegionById(id).PlayerDatas.TryGetValue(name, out data);
 
 		/// <summary>
 		/// 从数据库数据中读取存档信息
@@ -354,9 +308,7 @@ namespace Philosophyz
 			return new Tuple<string, PlayerData>(reader.Get<string>("Name"), playerData);
 		}
 
-		/// <summary>
-		/// 读取区域对应的所有存档数据
-		/// </summary>
+		/// <summary>读取区域对应的所有存档数据</summary>
 		/// <param name="id">区域</param>
 		/// <returns>存档数据集合</returns>
 		private Dictionary<string, PlayerData> ReadDatas(int id)
