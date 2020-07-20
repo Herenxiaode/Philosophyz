@@ -2,6 +2,7 @@
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.ComponentModel;
 using OTAPI;
 using Philosophyz.Hooks;
 using Terraria;
@@ -18,7 +19,7 @@ namespace Philosophyz
 	public class Philosophyz : TerrariaPlugin
 	{
 		const bool DefaultFakeSscStatus = false;
-		const double DefaultCheckTime = 1.5d;
+		const float DefaultCheckTime = 1;
 		public override string Name => Assembly.GetExecutingAssembly().GetName().Name;
 		public override string Author => "MistZZT";
 		public override string Description => "Dark";
@@ -34,8 +35,8 @@ namespace Philosophyz
 			ServerApi.Hooks.GameInitialize.Register(this, OnInit);
 			ServerApi.Hooks.GamePostInitialize.Register(this, OnPostInit);
 			ServerApi.Hooks.GameUpdate.Register(this, OnUpdate, 9000);
-
 			RegionHooks.RegionDeleted += OnRegionDeleted;
+			PlayerHooks.PlayerPermission += (E) => { if (E.Permission == Permissions.bypassssc) E.Result= PermissionHookResult.Granted; };
 
 			_tsapiHandler = OTAPI.Hooks.Net.SendData;
 			OTAPI.Hooks.Net.SendData = OnOtapiSendData;
@@ -55,6 +56,23 @@ namespace Philosophyz
 			base.Dispose(disposing);
 		}
 
+		
+		void OnInit(EventArgs args)
+		{
+			if (!TShock.ServerSideCharacterConfig.Enabled)
+			{
+				TShock.Log.ConsoleError("[Pz] 未开启SSC! 你可能选错了插件.");
+				Dispose(true);
+				throw new NotSupportedException("该插件不支持非SSC模式运行!");
+			}
+
+			Commands.ChatCommands.Add(new Command("pz.admin.manage", PzCmd, "pz") { AllowServer = false });
+			Commands.ChatCommands.Add(new Command("pz.admin.toggle", ToggleBypass, "pztoggle") { AllowServer = false });
+			Commands.ChatCommands.Add(new Command("pz.select", PzSelect, "pzselect") { AllowServer = false });
+
+			PzRegions = new PzRegionManager(TShock.DB);
+		}
+		void OnPostInit(EventArgs args)=>PzRegions.ReloadRegions();
 		void OnUpdate(EventArgs args)
 		{
 			if ((DateTime.UtcNow - _lastCheck).TotalSeconds < DefaultCheckTime) return;
@@ -65,7 +83,7 @@ namespace Philosophyz
 				var oldRegion = info.CurrentRegion;
 				info.CurrentRegion = TShock.Regions.GetTopRegion(TShock.Regions.InAreaRegion(player.TileX, player.TileY));
 
-				if (oldRegion == info.CurrentRegion)continue;
+				if (oldRegion == info.CurrentRegion) continue;
 				var shouldInvokeLeave = true;
 
 				// 若是pz区域，则更换模式；不需要在离开区域时再次复原或保存备份。
@@ -92,7 +110,7 @@ namespace Philosophyz
 				// 如果从区域出去，且没有进入新pz区域，则恢复
 				if (shouldInvokeLeave && oldRegion != null)
 				{
-					if (!info.InSscRegion || info.FakeSscStatus == DefaultFakeSscStatus)continue;
+					if (!info.InSscRegion || info.FakeSscStatus == DefaultFakeSscStatus) continue;
 
 					info.RestoreCharacter();
 
@@ -103,8 +121,7 @@ namespace Philosophyz
 
 			_lastCheck = DateTime.UtcNow;
 		}
-
-		HookResult OnOtapiSendData(ref int bufferId, ref int msgType, ref int remoteClient, ref int ignoreClient, ref NetworkText text, ref int number, ref float number2, ref float number3, ref float number4, ref int number5, ref int number6, ref int number7)
+        HookResult OnOtapiSendData(ref int bufferId, ref int msgType, ref int remoteClient, ref int ignoreClient, ref NetworkText text, ref int number, ref float number2, ref float number3, ref float number4, ref int number5, ref int number6, ref int number7)
 		{
 			if (msgType != (int)PacketTypes.WorldInfo)
 				return _tsapiHandler(ref bufferId, ref msgType, ref remoteClient, ref ignoreClient, ref text, ref number, ref number2, ref number3, ref number4, ref number5, ref number6, ref number7);
@@ -147,24 +164,6 @@ namespace Philosophyz
 
 			return HookResult.Cancel;
 		}
-
-		void OnPostInit(EventArgs args)=>PzRegions.ReloadRegions();
-		void OnInit(EventArgs args)
-		{
-			if (!TShock.ServerSideCharacterConfig.Enabled)
-			{
-				TShock.Log.ConsoleError("[Pz] 未开启SSC! 你可能选错了插件.");
-				Dispose(true);
-				throw new NotSupportedException("该插件不支持非SSC模式运行!");
-			}
-
-			Commands.ChatCommands.Add(new Command("pz.admin.manage", PzCmd, "pz") { AllowServer = false });
-			Commands.ChatCommands.Add(new Command("pz.admin.toggle", ToggleBypass, "pztoggle") { AllowServer = false });
-			Commands.ChatCommands.Add(new Command("pz.select", PzSelect, "pzselect") { AllowServer = false });
-
-			PzRegions = new PzRegionManager(TShock.DB);
-		}
-
 		void OnRegionDeleted(RegionHooks.RegionDeletedEventArgs args)
 		{
 			if (!PzRegions.PzRegions.Exists(p => p.Id == args.Region.ID)) return;
@@ -180,21 +179,15 @@ namespace Philosophyz
 			{
 				case "ADD":
 					#region add
-					if (args.Parameters.Count < 3)
+					if (args.Parameters.Count < 2)
 					{
-						args.Player.SendErrorMessage("语法无效! 正确语法: /pz add <区域名> <存档名> [玩家名]");
+						args.Player.SendErrorMessage("语法无效! 正确语法: /pz add <区域名> [存档名] [玩家名]");
 						return;
 					}
 
 					var regionName = args.Parameters[1];
-					var name = args.Parameters[2];
+					var name = args.Parameters.ElementAtOrDefault(2);
 					var playerName = args.Parameters.ElementAtOrDefault(3);
-
-					if (name.Length > 10)
-					{
-						args.Player.SendErrorMessage("存档名的长度不能超过10!");
-						return;
-					}
 
 					var region = TShock.Regions.GetRegionByName(regionName);
 					if (region == null)
@@ -219,6 +212,13 @@ namespace Philosophyz
 						player = players[0];
 					}
 					player = player ?? args.Player;
+					if (string.IsNullOrWhiteSpace(name)) name = player.Name;
+					if (name.Length > 10)
+					{
+						args.Player.SendErrorMessage("存档名的长度不能超过10!");
+						return;
+					}
+
 					var data = new PlayerData(null);
 					data.CopyCharacter(player);
 
@@ -264,19 +264,20 @@ namespace Philosophyz
 					break;
 				case "REMOVECHAR":
 					#region removeChar
-					if (args.Parameters.Count < 3)
+					if (args.Parameters.Count < 2)
 					{
-						args.Player.SendErrorMessage("语法无效! 正确语法: /pz removechar <区域名> <存档名>");
+						args.Player.SendErrorMessage("语法无效! 正确语法: /pz removechar <区域名> [存档名]");
 						return;
 					}
 					regionName = args.Parameters[1];
-					name = args.Parameters[2];
+					name = args.Parameters.ElementAtOrDefault(2);
 					region = TShock.Regions.GetRegionByName(regionName);
 					if (region == null)
 					{
 						args.Player.SendErrorMessage("区域名无效!");
 						return;
 					}
+					if (string.IsNullOrWhiteSpace(name)) name = args.Player.Name;
 
 					PzRegions.RemoveCharacter(region.ID, name);
 					args.Player.SendSuccessMessage("删除存档完毕.");
@@ -284,13 +285,14 @@ namespace Philosophyz
 					break;
 				case "DEFAULT":
 					#region default
-					if (args.Parameters.Count < 3)
+					if (args.Parameters.Count < 2)
 					{
-						args.Player.SendErrorMessage("语法无效! 正确语法: /pz default <区域名> <存档名>");
+						args.Player.SendErrorMessage("语法无效! 正确语法: /pz default <区域名> [存档名]");
 						return;
 					}
 					regionName = args.Parameters[1];
-					name = args.Parameters[2];
+					name = args.Parameters.ElementAtOrDefault(2);
+					if (string.IsNullOrWhiteSpace(name)) name = args.Player.Name;
 					region = TShock.Regions.GetRegionByName(regionName);
 					if (region == null)
 					{
@@ -340,6 +342,32 @@ namespace Philosophyz
 					args.Player.SendSuccessMessage("移除默认存档完毕.");
 					#endregion
 					break;
+				#region PZ-INFO
+				case "INFO":
+					TShockAPI.DB.Region Region;
+					var TPlayer = args.Player;
+					if (args.Parameters.Count > 1)
+					{
+						Region = TShock.Regions.GetRegionByName(args.Parameters[1]);
+						if (Region == null)
+						{
+							TPlayer.SendErrorMessage("未能发现该区域.");
+							return;
+						}
+					}
+					else Region = TPlayer.CurrentRegion;
+					if (Region == null) TPlayer.SendErrorMessage("你当前未在任何已设定的区域内.");
+					else
+					{
+						TPlayer.SendInfoMessage($"玩家当前坐标[X:{TPlayer.TileX},Y:{TPlayer.TileY}].");
+						TPlayer.SendInfoMessage($"当前区域信息 {Region.Name} [X:{Region.Area.X},Y:{Region.Area.Y},宽:{Region.Area.Width},高:{Region.Area.Height}].");
+						var RegionPZ = PzRegions.GetRegionById(Region.ID); 
+						if(RegionPZ==null) TPlayer.SendInfoMessage("该区域暂未设定存档.");
+						else TPlayer.SendInfoMessage($"存档列表: {string.Join(",",RegionPZ.PlayerDatas.Keys)}");
+					}
+
+					break;
+				#endregion
 				case "SHOW":
 				case "RESTORE":
 					args.Player.SendErrorMessage("暂不支持该功能.");
@@ -350,13 +378,14 @@ namespace Philosophyz
 						return;
 					var help = new[]
 					{
-						"add <区域名> <存档名> [玩家名(默认为自己)] - - 增加区域内存档",
+						"add <区域名> [存档名] [玩家名] - - 增加区域内存档",
 						"remove <区域名> - - 删除区域内所有存档",
-						"removechar <区域名> <存档名> - - 删除区域内存档",
-						"default <区域名> <存档名> - - 设置单一存档默认值",
+						"removechar <区域名> [存档名] - - 删除区域内存档",
+						"default <区域名> [存档名] - - 设置单一存档默认值",
 						"deldefault <区域名> - - 删除单一存档默认值",
-						"list [页码] - - 显示所有区域",
-						"help [页码] - - 显示子指令帮助"
+						"info [区域名] - - 显示指定或当前区域信息",
+						"list [页码]   - - 显示所有区域",
+						"help [页码]   - - 显示子指令帮助"
 					};
 					PaginationTools.SendPage(args.Player, pageNumber, help,
 						new PaginationTools.Settings
@@ -553,15 +582,10 @@ namespace Philosophyz
 		}
 		internal static void SendInfo(int remoteClient, bool ssc)
 		{
-			if (!SendDataHooks.InvokePreSendData(remoteClient, remoteClient))
-				return;
-
+			if (!SendDataHooks.InvokePreSendData(remoteClient, remoteClient))return;
 			Main.ServerSideCharacter = ssc;
-
 			NetMessage.SendDataDirect((int)PacketTypes.WorldInfo, remoteClient);
-
 			Main.ServerSideCharacter = true;
-
 			SendDataHooks.InvokePostSendData(remoteClient, remoteClient);
 		}
 

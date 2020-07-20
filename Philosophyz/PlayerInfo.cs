@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Linq;
 using Terraria;
 using Terraria.Localization;
 using TShockAPI;
@@ -35,10 +36,8 @@ namespace Philosophyz
 
 		public void SetBackupPlayerData()
 		{
-			var data = new PlayerData(_player);
-			data.CopyCharacter(_player);
-
-			OriginData = data;
+			OriginData = new PlayerData(_player);
+			OriginData.CopyCharacter(_player);
 		}
 
 		public void ChangeSlot(int slot, int netId, byte prefix, int stack)
